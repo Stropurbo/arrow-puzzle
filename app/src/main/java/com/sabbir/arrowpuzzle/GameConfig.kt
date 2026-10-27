@@ -33,20 +33,25 @@ object GameConfig {
     const val MUSIC_VOLUME = 0.35f
     // Per-level hint allowance shown as the badge count on the hint button.
     const val HINTS_PER_LEVEL = 2
-    /** Tapped-arrow colour while it slides out: the reference video's light blue, not the dark board colour. */
-    val ExitArrow = Color(0xFF7FB2E5)
-    /** Fade only starts once the arrow is almost off the canvas (see GameplayScreen), never mid-board. */
-    const val EXIT_FADE_START = 0.88f
-    /** How far behind the sliding arrow its fading trail segment lags, as a fraction of the slide. */
-    const val EXIT_TRAIL_LAG = 0.15f
+    /** Tapped-arrow colour while it slides out: the reference video's bright blue. */
+    val ExitArrow = Color(0xFF3FA7FF)
     /**
-     * Video-style exit-slide duration: a steady, readable glide instead of a
-     * snappy 210-310 ms flick. Longer arrows take longer, so speed along the
+     * Fade only in the last 5% of the slide, as a cleanup once the arrow is
+     * already off the canvas. The video does not fade on the board at all —
+     * the arrow simply slides off the screen edge — so any earlier fade
+     * makes it look like it is dissolving instead of flying out.
+     */
+    const val EXIT_FADE_START = 0.95f
+    /**
+     * Measured from the reference gameplay video (30 fps frames): a tap at
+     * ~0.6 s is almost gone by ~1.0 s, so a typical exit is ~350-400 ms at
+     * steady speed. Longer arrows take a little longer, so speed along the
      * path stays roughly constant; the ViewModel waits exactly this long
-     * before removing the piece, so the two stay in sync.
+     * before removing the piece, so the two stay in sync. The earlier
+     * 420-680 ms range was too slow and felt sluggish, not video-like.
      */
     fun exitDurationMs(cells: Int, rows: Int, cols: Int): Int =
-        (360 + cells * 22 + (rows + cols) * 2).coerceIn(420, 680)
+        (260 + cells * 14 + (rows + cols)).coerceIn(300, 420)
     // Stars reward a clean solve: no wrong taps and no hints for three.
     fun starsFor(errors: Int, hintsUsed: Int): Int {
         val penalty = errors.coerceAtLeast(0) + hintsUsed.coerceAtLeast(0)

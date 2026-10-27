@@ -12,11 +12,11 @@ class GameConfigTest {
 
     @Test
     fun exitDurationIsInReadableRange() {
-        // Smallest plausible arrow on a small board, and a long arrow on a big board.
+        // Measured from the reference video: ~350-400 ms for a typical exit.
         val short = GameConfig.exitDurationMs(cells = 2, rows = 8, cols = 7)
         val long = GameConfig.exitDurationMs(cells = 11, rows = 18, cols = 18)
-        assertTrue("short exit should be at least 420 ms, was $short", short >= 420)
-        assertTrue("long exit should be at most 680 ms, was $long", long <= 680)
+        assertTrue("short exit should be at least 300 ms, was $short", short >= 300)
+        assertTrue("long exit should be at most 420 ms, was $long", long <= 420)
         assertTrue("long exit ($long) should exceed short exit ($short)", long > short)
     }
 
@@ -29,8 +29,8 @@ class GameConfigTest {
 
     @Test
     fun exitFadeStartsLate() {
-        // Fading only in the last 12% of the slide, never mid-board.
-        assertTrue(GameConfig.EXIT_FADE_START >= 0.85f)
+        // Fading only in the last 5% of the slide, never mid-board.
+        assertTrue(GameConfig.EXIT_FADE_START >= 0.95f)
         assertTrue(GameConfig.EXIT_FADE_START < 1f)
     }
 }

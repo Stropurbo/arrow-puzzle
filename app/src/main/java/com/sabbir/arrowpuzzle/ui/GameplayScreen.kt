@@ -70,7 +70,6 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -339,7 +338,11 @@ fun GameplayScreen(
                         CountArrowIcon(color = MaterialTheme.colorScheme.onSurfaceVariant, size = 15.dp)
                         Spacer(Modifier.width(6.dp))
                         AnimatedContent(
-                            targetState = s.remainingIds.size,
+                            // Video: the counter drops the moment the arrow
+                            // starts sliding, not after it finishes leaving.
+                            // The moving piece is still in remainingIds until
+                            // finishMove, so subtract it while it slides.
+                            targetState = s.remainingIds.size - if (s.movingPieceId != null) 1 else 0,
                             transitionSpec = {
                                 (slideInVertically(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) { -it } + fadeIn(tween(160)))
                                     .togetherWith(slideOutVertically(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) { it } + fadeOut(tween(160)))
@@ -717,10 +720,53 @@ private fun buildSlitheringArrowPath(
 
     if (stopD <= startD || startD >= trackLen) return null
 
+    // Body only: the head is a separate filled triangle (see below), exactly
+    // like the reference video. The old open-V chevron drawn as part of this
+    // path made the sliding arrow read as a path, not as an arrow object.
     val path = Path()
     pm.getSegment(startD, stopD, path, true)
+    return path
+}
 
-    // Position & tangent for the arrowhead
+/**
+ * Filled triangular head for a sliding arrow, at the head position for the
+ * given progress along the same extended track buildSlitheringArrowPath
+ * uses. The video's head is a solid triangle, wider than the thin body line.
+ */
+private fun buildSlitheringArrowHead(
+    pts: List<Offset>,
+    corner: Float,
+    dir: Direction,
+    cell: Float,
+    progress: Float,
+    canvasSize: Size
+): Path? {
+    if (pts.isEmpty() || progress <= 0f) return null
+    val lastPt = pts.last()
+    val canvasExitDist = when (dir) {
+        Direction.RIGHT -> (canvasSize.width - lastPt.x) + cell * 3f
+        Direction.LEFT -> lastPt.x + cell * 3f
+        Direction.DOWN -> (canvasSize.height - lastPt.y) + cell * 3f
+        else -> lastPt.y + cell * 3f
+    }
+    val extendedPts = pts.toMutableList()
+    extendedPts.add(
+        Offset(
+            lastPt.x + dir.dc.toFloat() * (canvasExitDist + cell * 2f),
+            lastPt.y + dir.dr.toFloat() * (canvasExitDist + cell * 2f)
+        )
+    )
+    val fullTrack = roundedPolylinePath(extendedPts, corner)
+    val pm = PathMeasure()
+    pm.setPath(fullTrack, false)
+    val trackLen = pm.length
+    val origTrack = roundedPolylinePath(pts, corner)
+    val origPm = PathMeasure()
+    origPm.setPath(origTrack, false)
+    val arrowLen = max(origPm.length, cell * 0.5f)
+    val totalTravel = arrowLen + canvasExitDist
+    val stopD = min(arrowLen + totalTravel * progress, trackLen)
+    if (stopD <= 0f) return null
     val headPos = pm.getPosition(stopD)
     val headTan = pm.getTangent(stopD)
     val tanLen = headTan.getDistance()
@@ -730,14 +776,14 @@ private fun buildSlitheringArrowPath(
         Offset(dir.dc.toFloat(), dir.dr.toFloat())
     }
     val side = Offset(-v.y, v.x)
-    val headLen = cell * GameConfig.ARROW_HEAD_LENGTH_FRACTION
-    val headHalf = cell * GameConfig.ARROW_HEAD_HALF_WIDTH_FRACTION
+    val headLen = cell * 0.42f
+    val headHalf = cell * 0.28f
     val base = Offset(headPos.x - v.x * headLen, headPos.y - v.y * headLen)
-
-    path.moveTo(base.x + side.x * headHalf, base.y + side.y * headHalf)
-    path.lineTo(headPos.x, headPos.y)
+    val path = Path()
+    path.moveTo(headPos.x, headPos.y)
+    path.lineTo(base.x + side.x * headHalf, base.y + side.y * headHalf)
     path.lineTo(base.x - side.x * headHalf, base.y - side.y * headHalf)
-
+    path.close()
     return path
 }
 
@@ -893,25 +939,11 @@ private fun PuzzleCanvas(
                 )
             }
 
-            // 3b: Video-style exit — clean light-blue slide, no halo stack.
-            // The old outer/middle/inner glow made the arrow look muddy and
-            // cost three extra path draws per frame. One soft lift shadow
-            // keeps the "leaving the board" feel, and the arrow itself stays
-            // a single clean stroke, like the reference video.
-            if (isExit) {
-                val lift = sin(exitT * PI.toFloat()).coerceAtLeast(0f)
-                if (lift > 0.05f) {
-                    withTransform({
-                        translate(cell * 0.07f * lift, cell * 0.11f * lift)
-                    }) {
-                        drawPath(
-                            path = arrowPath,
-                            color = Color.Black.copy(alpha = 0.12f * lift * exitAlpha),
-                            style = Stroke(width = stroke * 1.3f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                        )
-                    }
-                }
-            }
+            // 3b: Video-style exit — flat, no shadow, no halo. The reference
+            // video's sliding arrow is a flat thin line with a filled head;
+            // the old lift shadow made ours look like a ribbon floating
+            // above the board instead of an arrow sliding on it.
+            // (No extra drawing here; the filled head is drawn below.)
 
             if (isHinted) {
                 drawPath(
@@ -934,12 +966,21 @@ private fun PuzzleCanvas(
                 )
             }
 
-            val currentStroke = if (isExit) stroke * (1f + 0.08f * sin(exitT * PI.toFloat()).coerceAtLeast(0f)) else stroke
+            // Video's sliding arrow is thinner than the static arrows —
+            // a thin bright line, not a thick ribbon.
+            val currentStroke = if (isExit || isUndo) stroke * 0.75f else stroke
             drawPath(
                 path = arrowPath,
                 color = baseColor.copy(alpha = finalAlpha),
                 style = Stroke(width = currentStroke, cap = StrokeCap.Round, join = StrokeJoin.Round)
             )
+            // Filled triangular head for a sliding arrow (video style).
+            if ((isExit && exitT > 0f) || (isUndo && undoT > 0f)) {
+                val t = if (isExit) exitT else undoT
+                buildSlitheringArrowHead(pts, corner, dir, cell, t, size)?.let { headPath ->
+                    drawPath(path = headPath, color = baseColor.copy(alpha = finalAlpha))
+                }
+            }
         }
 
         // 3i: Full-board invalid flash overlay — reference video shows a
