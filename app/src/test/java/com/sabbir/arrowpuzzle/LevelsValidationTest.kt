@@ -67,8 +67,8 @@ class LevelsValidationTest {
                 level.shape!!.size < level.rows * level.cols)
             assertTrue("shaped level ${level.id} pieces must stay inside the shape",
                 level.pieces.all { piece -> piece.cells.all { it in level.playableCells } })
-            // Heart level 101 is left-right symmetric.
-            if (level.id == 101) {
+            // Every Heart level is left-right symmetric (levels 6 and 101).
+            if (level.shapeName == "Heart") {
                 assertEquals("Heart", level.shapeName)
                 level.shape!!.forEach { cell ->
                     assertTrue("heart must be symmetric at $cell",
@@ -89,14 +89,19 @@ class LevelsValidationTest {
         assertTrue("Failures:\n${failures.take(10).joinToString("\n")}", failures.isEmpty())
     }
 
-    @Test fun earlyLevelsRampLikeReferenceVideo() {
-        // Level 1 must be a 3-arrow tutorial, then 6, 8, 10, 12 — difficulty
-        // rising with level, not a 12-arrow board on first play.
+    @Test fun earlyLevelsLikeReferenceVideo() {
+        // Reference video's first levels: 3, 6, 8, 10, then a jump to
+        // a large level 5 (~36) and a heart-shaped level 6 (~40).
+        // Tap Arrows matches those counts with original layouts:
+        // L5 is 36, L6 is a 38-arrow heart (the generator's best fit
+        // in its 125-cell mask, close to the video's ~40).
         val byId = loadLevels().associateBy { it.id }
-        val expected = mapOf(1 to 3, 2 to 6, 3 to 8, 4 to 10, 5 to 12)
+        val expected = mapOf(1 to 3, 2 to 6, 3 to 8, 4 to 10, 5 to 36, 6 to 38)
         expected.forEach { (id, count) ->
             assertEquals("level $id arrow count", count, byId[id]!!.pieces.size)
         }
+        assertEquals("Heart", byId[6]!!.shapeName)
+        assertTrue(byId[6]!!.isShaped)
         // Boards grow with the ramp too.
         assertTrue(byId[1]!!.rows <= byId[5]!!.rows)
         assertTrue(byId[1]!!.cols <= byId[5]!!.cols)

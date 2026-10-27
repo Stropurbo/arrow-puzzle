@@ -16,7 +16,11 @@ smaller boards and fewer pieces:
     L4 7x7, 10 pieces
     L5 7x8, 12 pieces
 
-Then existing level 6 (17 pieces, EASY) continues the ramp smoothly.
+NOTE (2026-10-27): levels 1-4 are still as above, but level 5 was
+later rebuilt to video size (36 arrows, 13x12) by
+tools/gen_video_levels.py, and level 6 became a 38-arrow heart.
+Do not re-run this script for level 5 without also re-applying
+the video levels, or level 5 will revert to 12 arrows.
 Layouts are generated randomly (deterministic seeds), not copied from
 any other game's levels. Prints a JSON array of the 5 new level objects
 to stdout; it does NOT rewrite levels.json itself.

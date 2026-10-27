@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -229,9 +230,7 @@ fun GameplayScreen(
         }
     }
 
-    // Grid Overlay state (default from GameConfig)
-    var showGridOverlay by remember { mutableStateOf(GameConfig.GRID_OVERLAY_DEFAULT) }
-
+    // Video-style: dots are always on, no toggle state any more.
     // Tap ripples.
     var ripples by remember(s.level.id) { mutableStateOf(listOf<Ripple>()) }
     var rippleSeq by remember(s.level.id) { mutableLongStateOf(0L) }
@@ -314,40 +313,30 @@ fun GameplayScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CircleIconButton(
+                    // Video-style top bar: plain blue back chevron (no circle),
+                    // only "Level N" in the middle (no board-size subtitle),
+                    // and a blue gear on the right (opens pause + settings).
+                    IconButton(
                         onClick = {
                             vm.audio.play("click")
                             vm.leaveGame()
                             onBack()
-                        },
-                        contentDescription = "Back to menu"
+                        }
                     ) {
-                        ChevronLeftIcon(color = MaterialTheme.colorScheme.onSurface, size = 18.dp)
+                        ChevronLeftIcon(color = GameConfig.HintBlue, size = 22.dp)
                     }
 
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Level ${s.level.id}",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 19.sp
-                            ),
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Text(
-                            text = if (s.level.isShaped) "${s.level.shapeName ?: "Shaped"} • ${s.level.rows}×${s.level.cols} • ${s.level.pieces.size} arrows"
-                            else "${s.level.rows}×${s.level.cols} • ${s.level.pieces.size} arrows",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                        )
-                    }
+                    Text(
+                        text = "Level ${s.level.id}",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 19.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
 
-                    CircleIconButton(
-                        onClick = vm::togglePause,
-                        contentDescription = "Pause"
-                    ) {
-                        PauseIcon(color = MaterialTheme.colorScheme.onSurface, size = 17.dp)
+                    IconButton(onClick = vm::togglePause) {
+                        GearIcon(color = GameConfig.HintBlue, size = 22.dp)
                     }
                 }
 
@@ -421,7 +410,7 @@ fun GameplayScreen(
                         largeHit = prefs.largeHitArea,
                         highContrast = prefs.highContrast,
                         reduced = reduced,
-                        showGrid = showGridOverlay,
+                        showGrid = true,
                         exitId = s.movingPieceId,
                         exitT = exitT.value,
                         undoId = s.undoingPieceId,
@@ -494,7 +483,9 @@ fun GameplayScreen(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 1. Hint Button + Label
+                    // Video-style bottom dock: exactly 2 circular buttons,
+                    // no text labels underneath, no grid toggle (dots are
+                    // always on now). 1. Hint, 2. Undo.
                     val showHintCta = hintsLeft > 0 && s.movingPieceId == null && s.moves == 0
                     val hintCtaTransition = rememberInfiniteTransition(label = "hint_cta")
                     val hintCtaScale by if (showHintCta && !reduced) {
@@ -508,89 +499,46 @@ fun GameplayScreen(
                         remember { mutableStateOf(1f) }
                     }
 
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        BadgedBox(
-                            modifier = Modifier.scale(hintCtaScale),
-                            badge = {
-                                if (hintsLeft > 0) {
-                                    Badge(
-                                        containerColor = GameConfig.HintBlue,
-                                        contentColor = Color.White
-                                    ) {
-                                        Text(
-                                            hintsLeft.toString(),
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp
-                                        )
-                                    }
+                    BadgedBox(
+                        modifier = Modifier.scale(hintCtaScale),
+                        badge = {
+                            if (hintsLeft > 0) {
+                                Badge(
+                                    containerColor = GameConfig.HintBlue,
+                                    contentColor = Color.White
+                                ) {
+                                    Text(
+                                        hintsLeft.toString(),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
                                 }
                             }
-                        ) {
-                            DockButton(
-                                onClick = vm::hint,
-                                enabled = hintsLeft > 0 && s.movingPieceId == null,
-                                contentDescription = "Show a hint"
-                            ) {
-                                HintIcon(
-                                    color = if (hintsLeft > 0) GameConfig.HintBlue
-                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f),
-                                    size = 24.dp
-                                )
-                            }
                         }
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "Hint",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (hintsLeft > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                        )
-                    }
-
-                    // 2. Undo / Reverse Button + Label
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    ) {
                         DockButton(
-                            onClick = vm::undo,
-                            enabled = canUndo,
-                            contentDescription = "Undo last move"
+                            onClick = vm::hint,
+                            enabled = hintsLeft > 0 && s.movingPieceId == null,
+                            contentDescription = "Show a hint"
                         ) {
-                            UndoIcon(
-                                color = if (canUndo) MaterialTheme.colorScheme.onSurface
+                            HintIcon(
+                                color = if (hintsLeft > 0) GameConfig.HintBlue
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f),
-                                size = 22.dp
+                                size = 24.dp
                             )
                         }
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "Undo",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (canUndo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                        )
                     }
 
-                    // 3. Dot Grid Toggle Button + Label
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        DockButton(
-                            onClick = {
-                                showGridOverlay = !showGridOverlay
-                                vm.audio.play("click")
-                            },
-                            active = showGridOverlay,
-                            contentDescription = "Toggle dot grid"
-                        ) {
-                            GridToggleIcon(
-                                color = if (showGridOverlay) GameConfig.Accent
-                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
-                                size = 22.dp
-                            )
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "Grid",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (showGridOverlay) GameConfig.Accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    // 2. Undo / Reverse Button (no label, video-style)
+                    DockButton(
+                        onClick = vm::undo,
+                        enabled = canUndo,
+                        contentDescription = "Undo last move"
+                    ) {
+                        UndoIcon(
+                            color = if (canUndo) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f),
+                            size = 22.dp
                         )
                     }
                 }
@@ -859,7 +807,10 @@ private fun PuzzleCanvas(
     tutorialId: String? = null,
     onTap: (Offset, String?) -> Unit
 ) {
-    val arrowColor = MaterialTheme.colorScheme.onBackground
+    // Video-style arrow colour: dark navy in light mode, soft off-white
+    // in dark mode (GameConfig.LightArrow / DarkArrow).
+    val arrowColor = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+        GameConfig.LightArrow else GameConfig.DarkArrow
     val gapColor = MaterialTheme.colorScheme.background
     val dotColor = MaterialTheme.colorScheme.onSurface.copy(
         alpha = if (highContrast) 0.32f else 0.14f

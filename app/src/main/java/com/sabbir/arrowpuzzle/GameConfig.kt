@@ -8,7 +8,9 @@ object GameConfig {
     const val INITIAL_HEARTS = 3
     const val INVALID_ANIMATION_MS = 280
     const val SPLASH_MS = 1400L
-    const val GRID_OVERLAY_DEFAULT = false
+    // Video-style: the dot grid is always visible (faint, in empty cells),
+    // there is no grid toggle in the bottom dock any more.
+    const val GRID_OVERLAY_DEFAULT = true
     const val EXIT_GLOW_ALPHA_MAX = 0.55f
     const val SELECTION_HIGHLIGHT_ALPHA = 0.28f
     const val CONFETTI_COUNT = 90
@@ -18,8 +20,9 @@ object GameConfig {
     const val DEFAULT_MUSIC = true
     const val DEFAULT_HAPTICS = true
     // Arrow geometry as a fraction of one board cell, tuned to the reference art.
-    const val ARROW_STROKE_FRACTION = 0.135f
-    const val ARROW_STROKE_FRACTION_HC = 0.16f
+    // Video-style: thinner lines than the original black strokes.
+    const val ARROW_STROKE_FRACTION = 0.11f
+    const val ARROW_STROKE_FRACTION_HC = 0.14f
     const val ARROW_HEAD_LENGTH_FRACTION = 0.34f
     const val ARROW_HEAD_HALF_WIDTH_FRACTION = 0.24f
     const val ARROW_CORNER_FRACTION = 0.17f
@@ -65,7 +68,8 @@ object GameConfig {
     val LightSurface = Color.White
     val DarkBackground = Color(0xFF141923)
     val DarkSurface = Color(0xFF202838)
-    val LightArrow = Color(0xFF000000)
+    // Video-style: dark navy, not pure black, in light mode.
+    val LightArrow = Color(0xFF0B1F4A)
     val DarkArrow = Color(0xFFE5ECFC)
     val Accent = Color(0xFF5468EC)
     val HintBlue = Color(0xFF2563EB)
