@@ -89,6 +89,19 @@ class LevelsValidationTest {
         assertTrue("Failures:\n${failures.take(10).joinToString("\n")}", failures.isEmpty())
     }
 
+    @Test fun earlyLevelsRampLikeReferenceVideo() {
+        // Level 1 must be a 3-arrow tutorial, then 6, 8, 10, 12 — difficulty
+        // rising with level, not a 12-arrow board on first play.
+        val byId = loadLevels().associateBy { it.id }
+        val expected = mapOf(1 to 3, 2 to 6, 3 to 8, 4 to 10, 5 to 12)
+        expected.forEach { (id, count) ->
+            assertEquals("level $id arrow count", count, byId[id]!!.pieces.size)
+        }
+        // Boards grow with the ramp too.
+        assertTrue(byId[1]!!.rows <= byId[5]!!.rows)
+        assertTrue(byId[1]!!.cols <= byId[5]!!.cols)
+    }
+
     @Test fun difficultyTiersPresent() {
         val diffs = loadLevels().map { it.difficulty }.toSet()
         assertTrue(diffs.containsAll(listOf(Difficulty.TUTORIAL, Difficulty.EASY, Difficulty.EXPERT)))

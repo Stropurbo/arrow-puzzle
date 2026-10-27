@@ -71,7 +71,9 @@ function greedySolve(pieces, rows, cols) {
 // Board size, arrow count and arrow length per difficulty band.
 // Counts are interpolated inside a band so density ramps smoothly.
 function tierFor(id) {
-  if (id <= 5)   return { rows: [7, 8],   cols: [7, 8],   pieces: [11, 14], len: [3, 6],  diff: 'TUTORIAL',     from: 1,  to: 5 };
+  // Video-like ramp: very few arrows first, then more as levels increase.
+  // Regenerated 2026-10-27 (tools/gen_early_levels.py) as 3, 6, 8, 10, 12.
+  if (id <= 5)   return { rows: [5, 7],   cols: [5, 8],   pieces: [3, 12],  len: [2, 5],  diff: 'TUTORIAL',     from: 1,  to: 5 };
   if (id <= 15)  return { rows: [8, 9],   cols: [8, 9],   pieces: [14, 18], len: [3, 7],  diff: 'EASY',         from: 6,  to: 15 };
   if (id <= 35)  return { rows: [9, 11],  cols: [9, 11],  pieces: [20, 26], len: [4, 8],  diff: 'MEDIUM',       from: 16, to: 35 };
   if (id <= 60)  return { rows: [11, 13], cols: [11, 13], pieces: [24, 30], len: [4, 10], diff: 'CHALLENGING',  from: 36, to: 60 };
