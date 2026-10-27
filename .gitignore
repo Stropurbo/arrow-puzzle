@@ -1,0 +1,21 @@
+# Android / Gradle cache & Build files
+.gradle/
+.gradle-user/
+.idea/
+.kotlin/
+/build/
+/app/build/
+*.iml
+/captures
+.externalNativeBuild
+.cxx
+
+# Local configuration
+local.properties
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Studio Artifacts
+.artifacts/
