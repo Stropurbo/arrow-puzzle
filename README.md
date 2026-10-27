@@ -1,0 +1,76 @@
+# Tap Arrows: Logic Puzzle
+
+An original, offline Android arrow-path puzzle built with Kotlin, Jetpack Compose and a flat Canvas renderer. It uses a single activity, immutable level definitions, a deterministic pure engine, StateFlow/ViewModel state, and DataStore progression, preferences and in-progress saves. No ads, network permission, analytics, or remote assets are included.
+
+## Run
+
+Open this directory in Android Studio, allow Gradle sync, select an Android 8.0+ device, and run `app`. From a terminal: `./gradlew :app:testDebugUnitTest :app:assembleDebug` (Windows: `gradlew.bat`). The debug APK is produced under `app/build/outputs/apk/debug/`.
+
+## Configuration
+
+Player-facing colors, timings, heart count, level count, stroke geometry, defaults, and feature flags are centralized in `GameConfig.kt`. Rename the display name in `res/values/strings.xml`. Namespace/application ID are build-time values in `app/build.gradle.kts`.
+
+Levels are explicit in `app/src/main/assets/levels.json`; each has its own dimensions, coordinates, tier, and witness removal order. Boards grow from 7×7 to 18×18, with roughly 12 to 35 mostly-straight, lightly-bent arrows packed into dense, interlocking layouts. `LevelValidator` verifies bounds, continuity, overlap, solution steps, and independent greedy clearability. Greedy solving is complete here because removing arrows only removes occupied cells and can never make a previously safe exit unsafe.
+
+Arrow art is tuned in `GameConfig.kt` (`ARROW_STROKE_FRACTION`, `ARROW_HEAD_*`, `ARROW_CORNER_FRACTION`, `DOT_RADIUS_FRACTION`) to match the reference's flat line work: pure black (`#000000`) strokes in light mode, rounded 90° bends, open chevron heads, a faint dot grid, and no shadows or gradients. The same renderer switches to a soft off-white stroke on dark surfaces.
+
+HUD and navigation glyphs (hearts, hint bulb, grid toggle, cog, stars, back chevron, level tiles, lock, trophy, flame, pause, undo) are hand-drawn Compose Canvas paths in `ui/Icons.kt`, so the UI stays sharp at any density and needs no emoji fonts.
+
+Pause, victory and out-of-hearts screens share one flat dialog style in `ui/GameDialogs.kt`: a dim scrim, a themed rounded card with a tinted icon badge, stat tiles, an accent pill primary action, an outlined secondary, and a quiet text action. The daily variant swaps the star row for streak and trophy progress. Destructive actions reuse the same shell as a confirmation card. All dialogs follow the active light/dark theme instead of hard-coded white surfaces.
+
+Level Select groups the 100 boards into 20-level chapters, with an overall progress card, per-chapter solved counts, three-star ratings on cleared tiles and a quiet lock state. Settings is built from the same flat cards: switch rows for audio, haptics and accessibility, a pill appearance picker, a compact about block and a matching reset confirmation. Both screens drop their back arrow when shown as home tabs, where the bottom bar handles navigation.
+
+## Gameplay, session resume and lifecycle
+
+- Tap an arrow that can slide straight out; blocked pieces cost a heart. Boards are immutable and every accepted tap is recorded, so Undo replays history safely.
+- Exit slides are animated with a cropped, slithering path, an accent halo and a short whoosh; invalid taps shake and pulse the heart row. Reduced motion skips the travel animation and haptics.
+- The HUD shows arrows left, hearts and difficulty, with an animated arrow counter. Hint, Undo and the dot-grid toggle sit in the bottom dock; hints are limited to two per board.
+- Pinch to zoom and drag to pan dense boards. The pan is clamped from the board centroid so a zoomed board can never be lost off-screen.
+- Back pauses the board. Leaving the game (back arrow, home, or backgrounding the app) writes a validated snapshot to DataStore; the Play button then reads `RESUME LEVEL N` and restores the exact board, counters and clock.
+- Campaign and daily saves use separate slots, so starting today's challenge never discards a story level in progress. A saved daily shows `In progress — tap to resume` on its home card and is discarded automatically once the date rolls over.
+- After process death while the game screen is open, the board that was played last is restored automatically rather than dropping the player back at the menu.
+- Saves are debounced (320 ms), serialized per slot, and rejected on load if any field is inconsistent (bounds, overlaps, unknown ids, history/counter mismatch, stale daily date). A rejected save falls back to the unlocked story level.
+- Stars reward a clean solve: three for no wrong taps and no hints, two for light help, one otherwise. Best stars per level are stored and shown on the level tiles.
+
+## Audio
+
+`tools/gen_audio.py` deterministically synthesizes every sound as 22.05 kHz mono WAV, so the repository carries no third-party samples. It produces a 12-second seamless ambient music loop plus click, tap, exit whoosh, invalid, heart-loss, hint, undo and win stingers under `res/raw/`. `audio/GameAudioManager.kt` loads SFX through SoundPool, loops music through MediaPlayer, requests audio focus, pauses on background and respects the sound/music toggles. Re-run `python tools/gen_audio.py` after tweaking the synthesis to regenerate the assets.
+
+## Daily Challenge and monthly trophies
+
+One deterministic puzzle per calendar day, generated on device by `engine/DailyLevelFactory.kt` (same reverse-construction method as the level tool, seeded by the date). Completing it grows a local streak and fills the month's trophy track; milestones at 5, 10, 15, 20 and 25 days unlock that month's trophies. Daily progress, streak and earned trophies live in DataStore (`data/DailyChallenge.kt`, `data/ProgressRepository.kt`) and are surfaced on the Play tab as a daily card plus a trophy shelf. An unfinished daily is saved like any other board and marked `In progress — tap to resume`. Fully offline; no timers or servers.
+
+## Theme and accessibility
+
+- Appearance follows the system by default and can be forced to Light or Dark; the theme flows through every screen, dialog and the gameplay board. Status/navigation bar icon contrast is synced to the active theme.
+- Reduced motion trims exit, shake, confetti and hint animations; high contrast thickens strokes and darkens grid dots; a larger hit area widens arrow tap targets; haptics can be turned off separately.
+- Interactive controls expose content descriptions, and heart/arrow counts are readable by screen readers.
+
+## Testing
+
+`gradlew.bat :app:testDebugUnitTest` runs JVM unit tests:
+
+- `EngineTest` — tap/finish/undo/hint behavior, solver invariants and star scoring.
+- `LevelsValidationTest` — all 100 bundled boards are valid and solvable.
+- `DailyChallengeTest` — streak, month rollover and trophy milestones.
+- `GameSessionTest` — save round-trip, mid-animation snapshots, corrupt/partial JSON rejection, invalid boards, counter checks, daily date handling, and encode/decode of all 100 levels.
+
+The suite currently runs 38 tests. Note: `lintDebug` currently aborts inside AGP's `ExperimentalDetector` (a Kotlin K2/lint tool bug, not an app issue), so lint is not part of the verification loop until the toolchain is updated.
+
+## Manual QA
+
+- Launch through Splash → Home and open the current level.
+- Tap clear and blocked arrows; verify removal versus heart loss.
+- Exercise Hint, Undo, Restart, Pause, completion, Next, and final-level behavior.
+- Leave mid-board (back arrow and hardware back), reopen from Home, and confirm the board, arrows, hearts and clock resume exactly.
+- Leave a campaign level in progress, play and leave a daily, then confirm the Play button still resumes the campaign board.
+- Force-stop the app while in a board and relaunch; the same board (campaign or daily) should restore.
+- Play today's daily, leave it unfinished, and confirm the card shows the in-progress state before resuming.
+- Finish boards with zero, one and several mistakes to confirm 3/2/1-star results and that level tiles keep the best rating.
+- Check theme switching (system/light/dark), accessibility toggles, reset confirmation, rotation, and large text.
+- Inspect early and late boards, zoom/pan on a dense board, and verify dialogs stay legible in both themes on a small phone.
+
+## Current scope
+
+The project contains 100 deterministic offline boards, the daily challenge with monthly trophies, session resume, pinch zoom/pan, synthesized music/SFX, and full light/dark theming. Visual, audio and instrumentation QA still need an emulator or physical device; unit tests and the debug build run without one. `ADS_ENABLED` remains false and there is no ad runtime.
+# arrow-puzzle
