@@ -81,6 +81,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sabbir.arrowpuzzle.GameConfig
+import com.sabbir.arrowpuzzle.engine.LevelSolver
 import com.sabbir.arrowpuzzle.model.ArrowPiece
 import com.sabbir.arrowpuzzle.model.Difficulty
 import com.sabbir.arrowpuzzle.model.Direction
@@ -260,6 +261,29 @@ fun GameplayScreen(
         }
     }
 
+    // Level 1 tutorial, like the reference video's "Tap to remove": until the
+    // first successful move, pulse the first safe arrow and show the pill.
+    // Cached on remainingIds so the solver does not run on every animation frame.
+    // This costs no hint — it is purely visual, and it vanishes on first success.
+    val tutorialId = remember(s.level.id, s.remainingIds) {
+        if (s.level.id == 1 && s.moves == 0) {
+            LevelSolver.safePieces(s.level, s.remainingIds).firstOrNull()
+        } else null
+    }
+    // Praise beat before the victory screen, like the reference video's
+    // "Well Done!" / "Nice Work!" banner on the board before Level Completed.
+    // Text only (this UI uses no emoji fonts, by design).
+    var victoryReady by remember(s.level.id) { mutableStateOf(false) }
+    LaunchedEffect(s.completed) {
+        if (s.completed) {
+            delay(1000)
+            victoryReady = true
+        } else {
+            victoryReady = false
+        }
+    }
+    val praiseText = listOf("Well Done!", "Nice Work!", "Impressive!", "Keep Going!")[s.level.id % 4]
+
     val hintsLeft = (GameConfig.HINTS_PER_LEVEL - s.hintsUsed).coerceAtLeast(0)
     val canUndo = s.history.isNotEmpty() && s.movingPieceId == null && s.undoingPieceId == null &&
         !s.paused && !s.completed && !s.outOfHearts
@@ -404,7 +428,8 @@ fun GameplayScreen(
                         undoT = undoT.value,
                         shakeV = shake.value,
                         pulse = pulse,
-                        ripples = ripples
+                        ripples = ripples,
+                        tutorialId = tutorialId
                     ) { pos, hitId ->
                         if (!reduced) {
                             rippleSeq++
@@ -422,6 +447,36 @@ fun GameplayScreen(
                         ) {
                             Text(
                                 text = "50% Completed",
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                                fontWeight = FontWeight.Bold,
+                                color = GameConfig.Accent
+                            )
+                        }
+                    }
+                    if (tutorialId != null && s.movingPieceId == null && !s.paused) {
+                        Surface(
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            color = GameConfig.Accent,
+                            shadowElevation = 4.dp
+                        ) {
+                            Text(
+                                text = "Tap to remove",
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                    if (s.completed && !victoryReady) {
+                        Surface(
+                            modifier = Modifier.align(Alignment.Center),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            shadowElevation = 4.dp
+                        ) {
+                            Text(
+                                text = praiseText,
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                                 fontWeight = FontWeight.Bold,
                                 color = GameConfig.Accent
@@ -564,7 +619,7 @@ fun GameplayScreen(
             onRestart = vm::restart
         )
 
-        s.completed -> VictoryDialog(
+        s.completed && victoryReady -> VictoryDialog(
             level = s.level,
             moves = s.moves,
             elapsedSeconds = s.elapsedSeconds,
@@ -801,6 +856,7 @@ private fun PuzzleCanvas(
     shakeV: Float,
     pulse: Float,
     ripples: List<Ripple>,
+    tutorialId: String? = null,
     onTap: (Offset, String?) -> Unit
 ) {
     val arrowColor = MaterialTheme.colorScheme.onBackground
@@ -887,6 +943,7 @@ private fun PuzzleCanvas(
             val isExit = p.id == exitId
             val isUndo = p.id == undoId
             val isHinted = p.id == state.hintedPieceId
+            val isTutorial = p.id == tutorialId
             val isInvalid = p.id == state.invalidPieceId
             val baseColor = when {
                 // Reference video: the tapped arrow turns light blue the
@@ -945,7 +1002,7 @@ private fun PuzzleCanvas(
             // above the board instead of an arrow sliding on it.
             // (No extra drawing here; the filled head is drawn below.)
 
-            if (isHinted) {
+            if (isHinted || isTutorial) {
                 drawPath(
                     path = arrowPath,
                     color = GameConfig.HintGlow.copy(alpha = 0.35f + 0.5f * pulse),
