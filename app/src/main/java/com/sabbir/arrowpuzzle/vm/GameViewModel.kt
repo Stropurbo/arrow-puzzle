@@ -114,8 +114,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _game.value = after
         val movingId = after.movingPieceId
         if (movingId != null) {
+            // Video-style: one short pop at tap, slide itself is silent.
             audio.play("tap")
-            audio.play("exit")
             val piece = after.level.pieces.find { it.id == movingId }
             val dur = if (prefs.value.reducedMotion) 40
                 else GameConfig.exitDurationMs(piece?.cells?.size ?: 4, after.level.rows, after.level.cols)
@@ -140,7 +140,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 if (next != null && done?.completed == false && done.outOfHearts == false) tap(next)
             }
         } else if (after.invalidPieceId != null) {
-            audio.play("tap")
+            // No tap pop here: the pop now means a successful move, so a
+            // wrong tap plays only its own buzz.
             audio.play("invalid")
             if (after.outOfHearts) {
                 audio.play("heart")

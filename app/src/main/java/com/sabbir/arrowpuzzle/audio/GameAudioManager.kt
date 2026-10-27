@@ -20,7 +20,6 @@ class GameAudioManager(context: Context) {
     private val pool: SoundPool = SoundPool.Builder().setMaxStreams(4).build()
     private val ids: Map<String, Int> = mapOf(
         "tap" to pool.load(app, R.raw.sfx_tap, 1),
-        "exit" to pool.load(app, R.raw.sfx_exit, 1),
         "invalid" to pool.load(app, R.raw.sfx_invalid, 1),
         "heart" to pool.load(app, R.raw.sfx_heart, 1),
         "hint" to pool.load(app, R.raw.sfx_hint, 1),

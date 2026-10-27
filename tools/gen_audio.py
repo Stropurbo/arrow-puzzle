@@ -124,28 +124,21 @@ def click() -> list[float]:
 
 
 def tap() -> list[float]:
-    n = int(0.075 * SR)
+    """Video-like tap pop: a single ultra-short, high click.
+
+    The reference video's tap is one loud ~20 ms pop and then silence
+    while the arrow slides out — no whoosh underneath. So this is a
+    50 ms pop (1800 -> 1000 Hz sweep, fast decay) and nothing else;
+    the old 0.28 s exit whoosh is retired, and the slide itself is
+    silent in the game code too (GameViewModel plays only "tap").
+    """
+    n = int(0.05 * SR)
     rng = random.Random(2)
     out = []
     for i in range(n):
         t = i / SR
-        env = math.exp(-t * 55.0)
-        out.append(env * (0.5 * swept_sine(760, 420, t, 0.075) + 0.06 * rng.uniform(-1, 1)))
-    return out
-
-
-def exit_whoosh() -> list[float]:
-    n = int(0.28 * SR)
-    rng = random.Random(3)
-    out = []
-    low = 0.0
-    for i in range(n):
-        t = i / SR
-        env = math.sin(math.pi * min(1.0, t / 0.28)) ** 1.4
-        cutoff = 0.035 + 0.22 * math.exp(-((t - 0.12) ** 2) / (2 * 0.065 ** 2))
-        low += cutoff * (rng.uniform(-1, 1) - low)
-        tone = 0.22 * swept_sine(620, 170, t, 0.28)
-        out.append(env * (low * 1.4 + tone))
+        env = math.exp(-t * 140.0)
+        out.append(env * (0.6 * swept_sine(1800, 1000, t, 0.05) + 0.08 * rng.uniform(-1, 1)))
     return out
 
 
@@ -198,17 +191,29 @@ def undo() -> list[float]:
 
 
 def win() -> list[float]:
-    n = int(0.86 * SR)
+    """Video-like win jingle: ~2.5 s of music, not a 0.86 s chime.
+
+    The reference video's Level Completed music runs about 2.5 s
+    continuously. So this is a rising C-major phrase (four notes up,
+    a step back, then up to a G6 climax) followed by a sustained
+    final chord that rings out to 2.5 s.
+    """
+    n = int(2.5 * SR)
     out = [0.0] * n
-    notes = [(0.00, 523.25, 0.30), (0.11, 659.25, 0.28), (0.22, 783.99, 0.28), (0.33, 1046.50, 0.32)]
+    notes = [
+        (0.00, 523.25, 0.30), (0.13, 659.25, 0.28), (0.26, 783.99, 0.28),
+        (0.39, 1046.50, 0.32), (0.55, 783.99, 0.26), (0.68, 880.00, 0.26),
+        (0.81, 1046.50, 0.28), (0.97, 1318.51, 0.34), (1.20, 1046.50, 0.28),
+        (1.35, 1318.51, 0.30), (1.55, 1567.98, 0.36),
+    ]
     for start, freq, amp in notes:
         bell(out, freq, int(start * SR), 0.60, amp)
-    # Airy final chord.
-    for freq in (523.25, 659.25, 783.99):
-        begin = int(0.33 * SR)
+    # Sustained final chord, ringing out to the end of the jingle.
+    for freq in (523.25, 659.25, 783.99, 1046.50):
+        begin = int(1.85 * SR)
         for k in range(n - begin):
             t = k / SR
-            env = math.exp(-t * 2.4) * min(1.0, t / 0.01)
+            env = math.exp(-t * 2.0) * min(1.0, t / 0.01)
             out[begin + k] += 0.055 * env * sine(freq, t, 0.3)
     return out
 
@@ -218,7 +223,7 @@ def main() -> None:
     write_wav("music_loop.wav", music(12.0), peak=0.30)
     write_wav("sfx_click.wav", click(), peak=0.42)
     write_wav("sfx_tap.wav", tap(), peak=0.52)
-    write_wav("sfx_exit.wav", exit_whoosh(), peak=0.48)
+    # No sfx_exit.wav any more: the slide is silent, video-style.
     write_wav("sfx_invalid.wav", invalid(), peak=0.55)
     write_wav("sfx_heart.wav", heart(), peak=0.50)
     write_wav("sfx_hint.wav", hint(), peak=0.48)
