@@ -15,6 +15,10 @@ class LevelRepository(context: Context) {
             ArrowPiece(po.getString("id"), cells, heading)
         }
         val rawSolution = o.getJSONArray("solution")
+        val shape = if (o.has("shape")) {
+            val rawShape = o.getJSONArray("shape")
+            List(rawShape.length()) { s -> val pair = rawShape.getJSONArray(s); GridCell(pair.getInt(0), pair.getInt(1)) }.toSet()
+        } else null
         LevelDefinition(
             o.getInt("id"),
             o.getInt("rows"),
@@ -22,7 +26,9 @@ class LevelRepository(context: Context) {
             pieces,
             Difficulty.valueOf(o.getString("difficulty")),
             o.optInt("allowedMistakes", 3),
-            List(rawSolution.length()) { rawSolution.getString(it) }
+            List(rawSolution.length()) { rawSolution.getString(it) },
+            shape,
+            if (o.has("shapeName")) o.getString("shapeName") else null
         )
     }
 }

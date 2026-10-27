@@ -2,7 +2,11 @@ package com.sabbir.arrowpuzzle.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -50,6 +54,10 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -58,7 +66,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.sabbir.arrowpuzzle.GameConfig
+import com.sabbir.arrowpuzzle.data.PlayerPrefs
+import com.sabbir.arrowpuzzle.model.LevelDefinition
 import kotlinx.coroutines.delay
+import kotlin.random.Random
+import androidx.compose.material3.Switch
 
 private val Scrim = Color(0x8C0F172A)
 
@@ -258,109 +270,237 @@ private fun PauseGlyph(color: Color, size: Dp = 30.dp) {
     }
 }
 
-/** Level puzzle finished. */
+/**
+ * Level puzzle finished — full-screen celebration in the reference video's
+ * style: blue background, falling confetti, the solved board as a thumbnail
+ * in a white card, stars and stats, then NEXT GAME / MAIN / REPLAY.
+ * This is a full-screen overlay (not a centred dialog), so it is drawn on
+ * top of the board in GameplayScreen's overlay slot.
+ */
 @Composable
 fun VictoryDialog(
-    levelId: Int,
+    level: LevelDefinition,
     moves: Int,
     elapsedSeconds: Int,
     errors: Int,
     hintsUsed: Int,
     onNext: () -> Unit,
+    onHome: () -> Unit,
     onReplay: () -> Unit
 ) {
+    val levelId = level.id
     val stars = GameConfig.starsFor(errors, hintsUsed)
+    val blue = Color(0xFF2F6BFF)
 
-    DialogShell(onDismissRequest = {}) {
-        DialogBadge(GameConfig.Accent) {
-            StarIcon(filled = true, color = GameConfig.Accent, size = 34.dp)
-        }
-
-        Spacer(Modifier.height(4.dp))
-
-        Eyebrow(
-            text = "LEVEL COMPLETE",
-            color = MaterialTheme.colorScheme.primary
+    // Falling confetti, deterministic so previews and tests see the same layout.
+    val confetti = remember {
+        val rnd = Random(42)
+        val colors = listOf(
+            Color(0xFFFBBF24), Color(0xFFF472B6), Color.White,
+            Color(0xFF34D399), Color(0xFFF97316), Color(0xFFA78BFA)
         )
-        DialogTitle("Level $levelId")
-
-        val starScales = remember { List(3) { Animatable(0f) } }
-        LaunchedEffect(Unit) {
-            starScales.forEachIndexed { i, anim ->
-                delay(i * 150L)
-                anim.animateTo(
-                    1f,
-                    spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
-                )
-            }
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            repeat(3) { index ->
-                val earned = index < stars
-                StarIcon(
-                    filled = earned,
-                    color = if (earned) Color(0xFFFBBF24)
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
-                    size = 32.dp,
-                    modifier = Modifier.scale(starScales[index].value)
-                )
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = when (stars) {
-                3 -> "Flawless — no mistakes, no hints"
-                2 -> "Solved with a little help"
-                else -> "Solved"
-            },
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(Modifier.height(6.dp))
-
-        val statAlphas = remember { List(3) { Animatable(0f) } }
-        LaunchedEffect(Unit) {
-            statAlphas.forEachIndexed { i, anim ->
-                delay(i * 100L)
-                anim.animateTo(1f, tween(200))
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            StatTile("Moves", "$moves", Modifier.alpha(statAlphas[0].value))
-            StatTile("Time", "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60), Modifier.alpha(statAlphas[1].value))
-            StatTile("Mistakes", "$errors", Modifier.alpha(statAlphas[2].value))
-        }
-
-        Spacer(Modifier.height(6.dp))
-
-        PrimaryPill(onClick = onNext) {
-            Text(
-                text = if (levelId == GameConfig.MAX_LEVELS) "SEE ALL LEVELS" else "NEXT LEVEL",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
+        List(36) {
+            ConfettiDot(
+                x = rnd.nextFloat(), y = rnd.nextFloat(),
+                size = 4f + rnd.nextFloat() * 6f,
+                color = colors[rnd.nextInt(colors.size)]
             )
         }
+    }
+    val fall by rememberInfiniteTransition(label = "victoryConfetti").animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(5000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ), label = "victoryFall"
+    )
 
-        TertiaryAction(text = "REPLAY LEVEL", onClick = onReplay)
+    val starScales = remember { List(3) { Animatable(0f) } }
+    LaunchedEffect(Unit) {
+        starScales.forEachIndexed { i, anim ->
+            delay(i * 150L)
+            anim.animateTo(
+                1f,
+                spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+            )
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(blue)
+            .padding(horizontal = 24.dp, vertical = 28.dp)
+    ) {
+        // Confetti layer behind the content.
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            confetti.forEach { dot ->
+                val y = ((dot.y + fall) % 1f) * size.height
+                drawCircle(
+                    color = dot.color.copy(alpha = 0.9f),
+                    radius = dot.size,
+                    center = Offset(dot.x * size.width, y)
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Level Completed",
+                fontSize = 30.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "Level $levelId  •  " + when (stars) {
+                    3 -> "Flawless — no mistakes, no hints"
+                    2 -> "Solved with a little help"
+                    else -> "Solved"
+                },
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White.copy(alpha = 0.85f),
+                textAlign = TextAlign.Center
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(3) { index ->
+                    val earned = index < stars
+                    StarIcon(
+                        filled = earned,
+                        color = if (earned) Color(0xFFFBBF24)
+                        else Color.White.copy(alpha = 0.35f),
+                        size = 34.dp,
+                        modifier = Modifier.scale(starScales[index].value)
+                    )
+                }
+            }
+
+            // White thumbnail card with the solved board's arrows, like the video.
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Color.White,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    MiniBoard(level = level, modifier = Modifier.fillMaxWidth().height(210.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        MiniStat("Moves", "$moves")
+                        MiniStat("Time", "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60))
+                        MiniStat("Mistakes", "$errors")
+                    }
+                }
+            }
+
+            // Next Game: white pill, blue text — the video's primary button.
+            Button(
+                onClick = onNext,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = blue)
+            ) {
+                Text(
+                    text = if (levelId == GameConfig.MAX_LEVELS) "SEE ALL LEVELS" else "NEXT GAME",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+            }
+            OutlinedButton(
+                onClick = onHome,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(50),
+                border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.6f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+            ) {
+                Text("MAIN", fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+            }
+            TextButton(
+                onClick = onReplay,
+                modifier = Modifier.height(40.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = 0.85f))
+            ) {
+                Text("REPLAY LEVEL", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
+            }
+        }
     }
 }
 
-/** Pause menu; the board underneath keeps its state. */
+private data class ConfettiDot(val x: Float, val y: Float, val size: Float, val color: Color)
+
+@Composable
+private fun MiniStat(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, color = Color(0xFF64748B))
+        Spacer(Modifier.height(2.dp))
+        Text(value, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+    }
+}
+
+/** Small solved-board thumbnail: dot grid plus one dark polyline per arrow. */
+@Composable
+private fun MiniBoard(level: LevelDefinition, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val cols = level.cols
+        val rows = level.rows
+        val cell = minOf(size.width / cols, size.height / rows)
+        val ox = (size.width - cell * cols) / 2f
+        val oy = (size.height - cell * rows) / 2f
+        val playable = level.playableCells
+        playable.forEach { cellPos ->
+            drawCircle(
+                color = Color(0xFFCBD5E1),
+                radius = 2.5f,
+                center = Offset(ox + (cellPos.col + .5f) * cell, oy + (cellPos.row + .5f) * cell)
+            )
+        }
+        level.pieces.forEach { piece ->
+            if (piece.cells.isEmpty()) return@forEach
+            val path = Path()
+            piece.cells.forEachIndexed { i, cellPos ->
+                val x = ox + (cellPos.col + .5f) * cell
+                val y = oy + (cellPos.row + .5f) * cell
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(
+                path = path,
+                color = Color(0xFF0F172A),
+                style = Stroke(width = cell * 0.14f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+        }
+    }
+}
+
+/**
+ * Pause menu; the board underneath keeps its state. With prefs supplied it
+ * also carries the reference video's in-game quick settings (sound, music,
+ * haptics) so the player never has to leave the game to change them.
+ */
 @Composable
 fun PauseDialog(
     levelLabel: String,
     onResume: () -> Unit,
     onRestart: () -> Unit,
-    onHome: () -> Unit
+    onHome: () -> Unit,
+    prefs: PlayerPrefs? = null,
+    onPrefsChange: ((PlayerPrefs) -> PlayerPrefs) -> Unit = {}
 ) {
     DialogShell(onDismissRequest = onResume) {
         DialogBadge(GameConfig.Accent) {
@@ -372,6 +512,13 @@ fun PauseDialog(
         Eyebrow("PAUSED", GameConfig.Accent)
         DialogTitle("Take a break")
         DialogSubtitle("$levelLabel is safe — the board stays exactly where you left it.")
+
+        if (prefs != null) {
+            Spacer(Modifier.height(6.dp))
+            QuickToggleRow("Sound", prefs.sound) { onPrefsChange { it.copy(sound = !it.sound) } }
+            QuickToggleRow("Music", prefs.music) { onPrefsChange { it.copy(music = !it.music) } }
+            QuickToggleRow("Haptics", prefs.haptics) { onPrefsChange { it.copy(haptics = !it.haptics) } }
+        }
 
         Spacer(Modifier.height(10.dp))
 
@@ -410,6 +557,23 @@ fun GameOverDialog(onContinue: () -> Unit, onRestart: () -> Unit) {
             Text("×${GameConfig.INITIAL_HEARTS}", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
         SecondaryPill("RESTART LEVEL", onRestart)
+    }
+}
+
+@Composable
+private fun QuickToggleRow(label: String, checked: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Switch(checked = checked, onCheckedChange = { onToggle() })
     }
 }
 

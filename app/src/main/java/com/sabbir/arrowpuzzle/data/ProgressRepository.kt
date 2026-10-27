@@ -2,6 +2,7 @@ package com.sabbir.arrowpuzzle.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.*
+import com.sabbir.arrowpuzzle.GameConfig
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -60,7 +61,13 @@ class ProgressRepository(private val context: Context) {
     )
 
     private fun snapshot(p: Preferences) = PlayerPrefs(
-        p[Keys.unlocked] ?: 1,
+        // Migration for players who already finished the old final level:
+        // unlocked must always be at least last-completed + 1, so level 101
+        // opens for them without replaying level 100.
+        maxOf(
+            p[Keys.unlocked] ?: 1,
+            (p[Keys.completed].orEmpty().mapNotNull { it.toIntOrNull() }.maxOrNull() ?: 0) + 1
+        ).coerceIn(1, GameConfig.MAX_LEVELS),
         p[Keys.completed].orEmpty().mapNotNull { it.toIntOrNull() }.toSet(),
         p[Keys.sound] ?: true,
         p[Keys.music] ?: true,
@@ -89,7 +96,7 @@ class ProgressRepository(private val context: Context) {
     val lastDaily: Flow<Boolean> = context.dataStore.data.map { it[Keys.activeDaily] ?: false }
 
     suspend fun complete(level: Int, moves: Int, seconds: Int, stars: Int) = context.dataStore.edit {
-        it[Keys.completed] = (it[Keys.completed].orEmpty() + level.toString()); it[Keys.unlocked] = maxOf(it[Keys.unlocked] ?: 1, (level + 1).coerceAtMost(100))
+        it[Keys.completed] = (it[Keys.completed].orEmpty() + level.toString()); it[Keys.unlocked] = maxOf(it[Keys.unlocked] ?: 1, (level + 1).coerceAtMost(GameConfig.MAX_LEVELS))
         val prevMoves = decodeMap(it[Keys.bestMoves].orEmpty())[level]
         if (prevMoves == null || moves < prevMoves) it[Keys.bestMoves] = encodeMap(decodeMap(it[Keys.bestMoves].orEmpty()) + (level to moves))
         val prevTime = decodeMap(it[Keys.bestTimes].orEmpty())[level]
@@ -116,7 +123,7 @@ class ProgressRepository(private val context: Context) {
 
     suspend fun update(transform: (PlayerPrefs) -> PlayerPrefs) = context.dataStore.edit { p ->
         val n = transform(snapshot(p))
-        p[Keys.unlocked] = n.unlocked.coerceIn(1, 100); p[Keys.completed] = n.completed.map { it.toString() }.toSet()
+        p[Keys.unlocked] = n.unlocked.coerceIn(1, GameConfig.MAX_LEVELS); p[Keys.completed] = n.completed.map { it.toString() }.toSet()
         p[Keys.sound] = n.sound; p[Keys.music] = n.music; p[Keys.haptics] = n.haptics
         p[Keys.reduced] = n.reducedMotion; p[Keys.contrast] = n.highContrast; p[Keys.largeHit] = n.largeHitArea; p[Keys.theme] = n.theme.name
         p[Keys.bestMoves] = encodeMap(n.bestMoves); p[Keys.bestTimes] = encodeMap(n.bestTimes); p[Keys.bestStars] = encodeMap(n.bestStars)

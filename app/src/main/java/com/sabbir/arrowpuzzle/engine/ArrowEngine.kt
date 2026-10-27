@@ -4,6 +4,9 @@ import com.sabbir.arrowpuzzle.GameConfig
 import com.sabbir.arrowpuzzle.model.*
 import kotlin.math.abs
 
+// Shaped boards need no special exit rule: cells outside the shape but inside
+// the bounding rectangle are simply empty space, so an arrow may slide through
+// them to leave the board. Only piece cells block an exit, exactly as here.
 object ExitSimulator {
     fun canExit(piece: ArrowPiece, others: Collection<ArrowPiece>, rows: Int, cols: Int): Boolean {
         val occupied = others.filter { it.id != piece.id }.flatMapTo(hashSetOf()) { it.cells }
@@ -34,11 +37,13 @@ object LevelValidator {
         if (level.rows < 2 || level.cols < 2) add("invalid board")
         if (level.pieces.isEmpty()) add("empty level")
         val ids = hashSetOf<String>(); val occupied = hashSetOf<GridCell>()
+        val playable = level.playableCells
         level.pieces.forEach { piece ->
             if (!ids.add(piece.id)) add("duplicate id ${piece.id}")
             if (piece.cells.isEmpty()) add("empty piece ${piece.id}")
             piece.cells.forEach { cell ->
                 if (cell.row !in 0 until level.rows || cell.col !in 0 until level.cols) add("out of bounds ${piece.id}")
+                if (cell !in playable) add("outside shape ${piece.id}")
                 if (!occupied.add(cell)) add("overlap at $cell")
             }
             if (piece.cells.distinct().size != piece.cells.size) add("self overlap ${piece.id}")

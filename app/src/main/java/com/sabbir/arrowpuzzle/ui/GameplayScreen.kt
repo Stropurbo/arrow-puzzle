@@ -8,7 +8,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -59,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import kotlinx.coroutines.delay
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -174,7 +174,9 @@ fun GameplayScreen(
     LaunchedEffect(s.movingPieceId) {
         if (s.movingPieceId != null && !reduced) {
             exitT.snapTo(0f)
-            exitT.animateTo(1f, tween(exitDur, easing = FastOutLinearInEasing))
+            // Steady speed along the whole path, like the reference video:
+            // no fast-start jump, no slow tail — the arrow glides out evenly.
+            exitT.animateTo(1f, tween(exitDur, easing = LinearEasing))
         } else exitT.snapTo(0f)
     }
 
@@ -244,6 +246,21 @@ fun GameplayScreen(
         }
     }
 
+    // Reference video shows a "50% Completed" banner mid-level, once, per level.
+    var milestoneShown by remember(s.level.id) { mutableStateOf(false) }
+    var showMilestone by remember(s.level.id) { mutableStateOf(false) }
+    LaunchedEffect(s.remainingIds.size, s.level.id) {
+        val total = s.level.pieces.size
+        if (!milestoneShown && total >= 4 && s.remainingIds.isNotEmpty() &&
+            s.remainingIds.size * 2 <= total
+        ) {
+            milestoneShown = true
+            showMilestone = true
+            delay(1600)
+            showMilestone = false
+        }
+    }
+
     val hintsLeft = (GameConfig.HINTS_PER_LEVEL - s.hintsUsed).coerceAtLeast(0)
     val canUndo = s.history.isNotEmpty() && s.movingPieceId == null && s.undoingPieceId == null &&
         !s.paused && !s.completed && !s.outOfHearts
@@ -295,7 +312,8 @@ fun GameplayScreen(
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Text(
-                            text = "${s.level.rows}×${s.level.cols} • ${s.level.pieces.size} arrows",
+                            text = if (s.level.isShaped) "${s.level.shapeName ?: "Shaped"} • ${s.level.rows}×${s.level.cols} • ${s.level.pieces.size} arrows"
+                            else "${s.level.rows}×${s.level.cols} • ${s.level.pieces.size} arrows",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
@@ -391,6 +409,21 @@ fun GameplayScreen(
                             ripples = (ripples + r).takeLast(5)
                         }
                         if (hitId != null) vm.tap(hitId)
+                    }
+                    if (showMilestone) {
+                        Surface(
+                            modifier = Modifier.align(Alignment.Center),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            shadowElevation = 4.dp
+                        ) {
+                            Text(
+                                text = "50% Completed",
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                                fontWeight = FontWeight.Bold,
+                                color = GameConfig.Accent
+                            )
+                        }
                     }
                 }
 
@@ -518,7 +551,9 @@ fun GameplayScreen(
             onHome = {
                 vm.leaveGame()
                 onBack()
-            }
+            },
+            prefs = prefs,
+            onPrefsChange = vm::setPrefs
         )
 
         s.outOfHearts -> GameOverDialog(
@@ -527,12 +562,16 @@ fun GameplayScreen(
         )
 
         s.completed -> VictoryDialog(
-            levelId = s.level.id,
+            level = s.level,
             moves = s.moves,
             elapsedSeconds = s.elapsedSeconds,
             errors = s.errors,
             hintsUsed = s.hintsUsed,
             onNext = if (s.level.id == GameConfig.MAX_LEVELS) onLevels else onNext,
+            onHome = {
+                vm.leaveGame()
+                onBack()
+            },
             onReplay = vm::restart
         )
     }
@@ -776,16 +815,19 @@ private fun PuzzleCanvas(
         val boardRight = ox + cell * state.level.cols
         val boardBottom = oy + cell * state.level.rows
 
-        if (showGrid) {
+        // Dots only on playable cells, so a shaped board reads as its shape
+        // instead of a rectangle. Shaped boards always show faint shape dots,
+        // even with the grid toggle off, otherwise the heart is invisible
+        // until the player has already cleared most of it.
+        if (showGrid || state.level.isShaped) {
             val dotRadius = (cell * GameConfig.DOT_RADIUS_FRACTION).coerceIn(2.5f, 4.5f)
-            for (r in 0 until state.level.rows) {
-                for (c in 0 until state.level.cols) {
-                    drawCircle(
-                        color = dotColor,
-                        radius = dotRadius,
-                        center = Offset(ox + (c + .5f) * cell, oy + (r + .5f) * cell)
-                    )
-                }
+            val shapeDotColor = if (showGrid) dotColor else dotColor.copy(alpha = dotColor.alpha * 0.55f)
+            for (cellPos in state.level.playableCells) {
+                drawCircle(
+                    color = shapeDotColor,
+                    radius = dotRadius,
+                    center = Offset(ox + (cellPos.col + .5f) * cell, oy + (cellPos.row + .5f) * cell)
+                )
             }
         }
 
@@ -801,7 +843,9 @@ private fun PuzzleCanvas(
             val isHinted = p.id == state.hintedPieceId
             val isInvalid = p.id == state.invalidPieceId
             val baseColor = when {
-                isExit -> GameConfig.Accent
+                // Reference video: the tapped arrow turns light blue the
+                // moment it starts sliding, and stays that colour until gone.
+                isExit -> GameConfig.ExitArrow
                 isUndo -> GameConfig.Accent
                 isHinted -> GameConfig.HintBlue
                 isInvalid -> GameConfig.Danger
@@ -810,7 +854,10 @@ private fun PuzzleCanvas(
 
             // 3c: Per-arrow staggered reveal alpha
             val revealAlpha = (reveal.value - index * 0.04f).coerceIn(0f, 1f)
-            val exitAlpha = if (isExit) (1f - (exitT - 0.82f) / 0.18f).coerceIn(0f, 1f) else 1f
+            // Fade only at the very end of the slide, once the arrow is
+            // already off the board (GameConfig.EXIT_FADE_START) — the old
+            // 0.82 fade made it vanish while still on the board.
+            val exitAlpha = if (isExit) (1f - (exitT - GameConfig.EXIT_FADE_START) / (1f - GameConfig.EXIT_FADE_START)).coerceIn(0f, 1f) else 1f
             val finalAlpha = revealAlpha * exitAlpha
 
             var pts = p.cells.map {
@@ -846,42 +893,24 @@ private fun PuzzleCanvas(
                 )
             }
 
-            // 3b: Richer exit animation — 3D lift-off elevation + glowing energy trail
+            // 3b: Video-style exit — clean light-blue slide, no halo stack.
+            // The old outer/middle/inner glow made the arrow look muddy and
+            // cost three extra path draws per frame. One soft lift shadow
+            // keeps the "leaving the board" feel, and the arrow itself stays
+            // a single clean stroke, like the reference video.
             if (isExit) {
                 val lift = sin(exitT * PI.toFloat()).coerceAtLeast(0f)
-                val trailFade = (1f - exitT).coerceIn(0f, 1f) * exitAlpha
-
-                // Elevation drop shadow (makes the arrow look like it lifted off the board into the air)
                 if (lift > 0.05f) {
                     withTransform({
                         translate(cell * 0.07f * lift, cell * 0.11f * lift)
                     }) {
                         drawPath(
                             path = arrowPath,
-                            color = Color.Black.copy(alpha = 0.15f * lift * exitAlpha),
+                            color = Color.Black.copy(alpha = 0.12f * lift * exitAlpha),
                             style = Stroke(width = stroke * 1.3f, cap = StrokeCap.Round, join = StrokeJoin.Round)
                         )
                     }
                 }
-
-                // Outermost glow
-                drawPath(
-                    path = arrowPath,
-                    color = GameConfig.Accent.copy(alpha = 0.14f * trailFade),
-                    style = Stroke(width = stroke * 5.2f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                )
-                // Middle halo
-                drawPath(
-                    path = arrowPath,
-                    color = GameConfig.Accent.copy(alpha = 0.26f * trailFade),
-                    style = Stroke(width = stroke * 3.4f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                )
-                // Inner bright core
-                drawPath(
-                    path = arrowPath,
-                    color = Color.White.copy(alpha = 0.50f * trailFade),
-                    style = Stroke(width = stroke * 1.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                )
             }
 
             if (isHinted) {
@@ -905,7 +934,7 @@ private fun PuzzleCanvas(
                 )
             }
 
-            val currentStroke = if (isExit) stroke * (1f + 0.16f * sin(exitT * PI.toFloat()).coerceAtLeast(0f)) else stroke
+            val currentStroke = if (isExit) stroke * (1f + 0.08f * sin(exitT * PI.toFloat()).coerceAtLeast(0f)) else stroke
             drawPath(
                 path = arrowPath,
                 color = baseColor.copy(alpha = finalAlpha),
@@ -913,9 +942,10 @@ private fun PuzzleCanvas(
             )
         }
 
-        // 3i: Full-board invalid flash overlay
+        // 3i: Full-board invalid flash overlay — reference video shows a
+        // clear red flash on a wrong tap, not a barely-visible one.
         if (state.invalidPieceId != null && shakeV > 0f) {
-            val flashAlpha = (0.06f * sin(shakeV * PI.toFloat() * 2f)).toFloat().coerceAtLeast(0f)
+            val flashAlpha = (0.14f * sin(shakeV * PI.toFloat() * 2f)).toFloat().coerceAtLeast(0f)
             drawRect(
                 color = GameConfig.Danger.copy(alpha = flashAlpha),
                 topLeft = Offset(ox, oy),

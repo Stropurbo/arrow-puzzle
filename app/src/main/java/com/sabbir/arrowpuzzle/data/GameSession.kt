@@ -30,6 +30,8 @@ data class GameSession(
     val cols: Int,
     val pieces: List<ArrowPiece>,
     val solution: List<String>,
+    val shape: Set<GridCell>? = null,
+    val shapeName: String? = null,
     val remainingIds: Set<String>,
     val moves: Int,
     val errors: Int,
@@ -75,8 +77,11 @@ data class GameSession(
             pieces = pieces,
             difficulty = difficulty,
             allowedMistakes = allowedMistakes,
-            solution = solution.ifEmpty { pieces.map { it.id }.reversed() }
+            solution = solution.ifEmpty { pieces.map { it.id }.reversed() },
+            shape = shape,
+            shapeName = shapeName
         )
+        if (shape != null && pieces.any { piece -> piece.cells.any { it !in level.playableCells } }) return null
         return GameState(
             level = level,
             remainingIds = remainingIds.toCollection(LinkedHashSet()),
@@ -114,6 +119,12 @@ data class GameSession(
             }
         })
         root.put("solution", JSONArray(solution))
+        shape?.let {
+            root.put("shape", JSONArray().apply {
+                it.forEach { cell -> put(JSONArray().put(cell.row).put(cell.col)) }
+            })
+        }
+        shapeName?.let { root.put("shapeName", it) }
         root.put("remainingIds", JSONArray(remainingIds.toList()))
         root.put("moves", moves)
         root.put("errors", errors)
@@ -140,6 +151,8 @@ data class GameSession(
                 cols = level.cols,
                 pieces = level.pieces,
                 solution = level.solution,
+                shape = level.shape,
+                shapeName = level.shapeName,
                 remainingIds = state.remainingIds.toSet(),
                 moves = state.moves,
                 errors = state.errors,
@@ -173,6 +186,10 @@ data class GameSession(
                     pieces.add(ArrowPiece(obj.getString("id"), cells, heading))
                 }
 
+                val shape = if (root.has("shape")) {
+                    val rawShape = root.getJSONArray("shape")
+                    List(rawShape.length()) { s -> val pair = rawShape.getJSONArray(s); GridCell(pair.getInt(0), pair.getInt(1)) }.toSet()
+                } else null
                 GameSession(
                     levelId = root.getInt("levelId"),
                     daily = root.getBoolean("daily"),
@@ -183,6 +200,8 @@ data class GameSession(
                     cols = root.getInt("cols"),
                     pieces = pieces,
                     solution = root.getJSONArray("solution").toStringList(),
+                    shape = shape,
+                    shapeName = if (root.has("shapeName")) root.getString("shapeName") else null,
                     remainingIds = root.getJSONArray("remainingIds").toStringList().toSet(),
                     moves = root.getInt("moves"),
                     errors = root.getInt("errors"),

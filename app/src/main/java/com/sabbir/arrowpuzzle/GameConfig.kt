@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 
 object GameConfig {
     const val GAME_NAME = "Tap Arrows"
-    const val MAX_LEVELS = 100
+    const val MAX_LEVELS = 101
     const val INITIAL_HEARTS = 3
     const val INVALID_ANIMATION_MS = 280
     const val SPLASH_MS = 1400L
@@ -33,9 +33,20 @@ object GameConfig {
     const val MUSIC_VOLUME = 0.35f
     // Per-level hint allowance shown as the badge count on the hint button.
     const val HINTS_PER_LEVEL = 2
-    /** Fast, crisp exit-slide duration: snappy feel matching commercial reference puzzle game. */
+    /** Tapped-arrow colour while it slides out: the reference video's light blue, not the dark board colour. */
+    val ExitArrow = Color(0xFF7FB2E5)
+    /** Fade only starts once the arrow is almost off the canvas (see GameplayScreen), never mid-board. */
+    const val EXIT_FADE_START = 0.88f
+    /** How far behind the sliding arrow its fading trail segment lags, as a fraction of the slide. */
+    const val EXIT_TRAIL_LAG = 0.15f
+    /**
+     * Video-style exit-slide duration: a steady, readable glide instead of a
+     * snappy 210-310 ms flick. Longer arrows take longer, so speed along the
+     * path stays roughly constant; the ViewModel waits exactly this long
+     * before removing the piece, so the two stay in sync.
+     */
     fun exitDurationMs(cells: Int, rows: Int, cols: Int): Int =
-        (170 + cells * 8 + (rows + cols) * 2).coerceIn(210, 310)
+        (360 + cells * 22 + (rows + cols) * 2).coerceIn(420, 680)
     // Stars reward a clean solve: no wrong taps and no hints for three.
     fun starsFor(errors: Int, hintsUsed: Int): Int {
         val penalty = errors.coerceAtLeast(0) + hintsUsed.coerceAtLeast(0)

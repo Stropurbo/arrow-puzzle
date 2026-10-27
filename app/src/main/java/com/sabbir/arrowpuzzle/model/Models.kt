@@ -13,7 +13,11 @@ data class ArrowPiece(val id: String, val cells: List<GridCell>, val singleCellH
         return Direction.entries.first { it.dr == b.row - a.row && it.dc == b.col - a.col }
     }
 }
-data class LevelDefinition(val id: Int, val rows: Int, val cols: Int, val pieces: List<ArrowPiece>, val difficulty: Difficulty, val allowedMistakes: Int = 3, val solution: List<String>)
+data class LevelDefinition(val id: Int, val rows: Int, val cols: Int, val pieces: List<ArrowPiece>, val difficulty: Difficulty, val allowedMistakes: Int = 3, val solution: List<String>, val shape: Set<GridCell>? = null, val shapeName: String? = null) {
+    /** Cells an arrow may sit on. Null shape means the full rectangle. */
+    val playableCells: Set<GridCell> get() = shape ?: (0 until rows).flatMap { r -> (0 until cols).map { c -> GridCell(r, c) } }.toSet()
+    val isShaped: Boolean get() = shape != null
+}
 data class RemovedMove(val pieceId: String)
 data class GameState(
     val level: LevelDefinition,

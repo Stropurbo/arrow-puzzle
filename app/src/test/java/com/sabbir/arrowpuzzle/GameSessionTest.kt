@@ -129,6 +129,36 @@ class GameSessionTest {
     }
 
     @Test
+    fun shapedLevelSessionKeepsItsShape() {
+        val file = listOf(
+            File("app/src/main/assets/levels.json"),
+            File("src/main/assets/levels.json"),
+            File("../app/src/main/assets/levels.json")
+        ).firstOrNull { it.exists() } ?: error("levels.json not found")
+        val root = JSONArray(file.readText())
+        val obj = List(root.length()) { root.getJSONObject(it) }.first { it.getInt("id") == 101 }
+        val rawShape = obj.getJSONArray("shape")
+        val shape = List(rawShape.length()) { s -> val pair = rawShape.getJSONArray(s); GridCell(pair.getInt(0), pair.getInt(1)) }.toSet()
+        val rawPieces = obj.getJSONArray("pieces")
+        val pieces = List(rawPieces.length()) { p ->
+            val po = rawPieces.getJSONObject(p)
+            ArrowPiece(po.getString("id"), List(po.getJSONArray("cells").length()) { c ->
+                val pair = po.getJSONArray("cells").getJSONArray(c); GridCell(pair.getInt(0), pair.getInt(1))
+            })
+        }
+        val level = LevelDefinition(101, obj.getInt("rows"), obj.getInt("cols"), pieces,
+            Difficulty.valueOf(obj.getString("difficulty")), 3,
+            List(obj.getJSONArray("solution").length()) { obj.getJSONArray("solution").getString(it) },
+            shape, obj.getString("shapeName"))
+        val decoded = GameSession.decode(GameSession.from(GameState(level)).encode())!!
+        val restored = decoded.toGameState()
+        assertNotNull(restored)
+        assertTrue(restored!!.level.isShaped)
+        assertEquals("Heart", restored.level.shapeName)
+        assertEquals(shape, restored.level.shape)
+    }
+
+    @Test
     fun everyBundledLevelCanBeSavedAndRestored() {
         val file = listOf(
             File("app/src/main/assets/levels.json"),
